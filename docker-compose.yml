@@ -1,0 +1,81 @@
+# ─────────────────────────────────────────────────────────────
+# publicnotice-ai · docker-compose (DEV LOCAL)
+# ─────────────────────────────────────────────────────────────
+# Em produção usamos Railway (API + Postgres) + Vercel (Web).
+# Este compose serve apenas para desenvolvimento local.
+# ─────────────────────────────────────────────────────────────
+
+name: publicnotice-ai
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: publicnotice-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: publicnotice
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./infra/docker/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d publicnotice"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: publicnotice-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+    container_name: publicnotice-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@postgres:5432/publicnotice
+      OLLAMA_BASE_URL: http://ollama:11434
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./apps/api/src:/app/src
+      - ./apps/api/storage:/app/storage
+      - ./data:/app/data:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+
+  web:
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+    container_name: publicnotice-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+
+volumes:
+  postgres-data:
+  ollama-data:

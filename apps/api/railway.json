@@ -1,0 +1,32 @@
+# Configuração mínima do Railway para deploy desta API.
+# Railway vai detectar automaticamente o Dockerfile via Nixpacks
+# se não houver um. Aqui forçamos uso do Dockerfile compartilhado.
+#
+# Para deploy:
+#   1. Railway → New Project → Deploy from GitHub
+#   2. Settings → Root Directory: apps/api
+#   3. Settings → Custom Build Command: (deixar vazio)
+#   4. Settings → Custom Start Command: (deixar vazio)
+#
+# Variáveis de ambiente necessárias em produção:
+#   DATABASE_URL  (auto via plugin Postgres + pgvector)
+#   LLM_PROVIDER=groq
+#   GROQ_API_KEY=...
+#   EMBEDDING_PROVIDER=gemini
+#   GEMINI_API_KEY=...
+#   CORS_ORIGINS=https://<seu-projeto>.vercel.app
+
+{
+  "$schema": "https://railway.com/railway.schema.json",
+  "build": {
+    "builder": "DOCKERFILE",
+    "dockerfilePath": "../../infra/docker/api.Dockerfile"
+  },
+  "deploy": {
+    "startCommand": "uvicorn publicnotice.main:app --host 0.0.0.0 --port $PORT",
+    "healthcheckPath": "/health",
+    "healthcheckTimeout": 30,
+    "restartPolicyType": "ON_FAILURE",
+    "restartPolicyMaxRetries": 3
+  }
+}
