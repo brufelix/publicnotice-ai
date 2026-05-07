@@ -1,24 +1,51 @@
-"""Documents API — upload, list, get."""
+"""Documents API — async upload, list, get.
+
+Upload flow (async):
+1. Client POSTs the PDF (multipart/form-data).
+2. We validate, persist a ``Document`` row with status ``PENDING`` and **commit
+   immediately**, then return ``202 Accepted`` with the document id.
+3. A FastAPI ``BackgroundTask`` opens its own DB session + adapters and runs
+   the heavy ingestion pipeline (parse → chunk → embed → store), transitioning
+   the row to ``INDEXING`` and finally ``INDEXED`` or ``FAILED``.
+4. The client polls ``GET /documents/{id}`` until status is terminal.
+
+Why a fresh session in the background task: the request-scoped ``AsyncSession``
+is closed as soon as the HTTP response is returned, so any work scheduled
+afterwards must own its session lifecycle.
+"""
 
 from __future__ import annotations
 
 from datetime import datetime
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, UploadFile, status
-from pydantic import BaseModel, Field
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, status
+from pydantic import BaseModel
 
 from publicnotice.api.deps import (
     DocumentRepositoryDep,
-    IngestionServiceDep,
     SessionDep,
+    SettingsDep,
 )
+from publicnotice.api.providers import (
+    build_chunker,
+    build_embeddings,
+    build_pdf_parser,
+)
+from publicnotice.api.rate_limit import limiter
+from publicnotice.adapters.vectorstore.pgvector import PgVectorStore
+from publicnotice.config import Settings, get_settings
 from publicnotice.domain.document import Document, DocumentStatus
-from publicnotice.domain.exceptions import ValidationError
+from publicnotice.infra.db import SessionLocal
+from publicnotice.infra.logging import get_logger
+from publicnotice.infra.repositories import DocumentRepository
+from publicnotice.services.ingestion import IngestionService
 
 router = APIRouter(prefix="/documents", tags=["documents"])
+log = get_logger(__name__)
 
 _MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # 25 MB
+_UPLOAD_RATE_LIMIT = get_settings().rate_limit_upload
 
 
 class DocumentResponse(BaseModel):
@@ -30,7 +57,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, doc: Document) -> DocumentResponse:
+    def from_domain(cls, doc: Document) -> "DocumentResponse":
         return cls(
             id=doc.id,
             filename=doc.filename,
@@ -41,22 +68,52 @@ class DocumentResponse(BaseModel):
         )
 
 
-class IngestionResponse(BaseModel):
-    document: DocumentResponse
-    chunks_created: int = Field(ge=0)
+async def _process_in_background(document_id: UUID, data: bytes, settings: Settings) -> None:
+    """Run the full ingestion pipeline in a fresh session/scope.
+
+    Errors are caught and logged — the document row already carries the
+    ``FAILED`` status set by the service.
+    """
+    async with SessionLocal() as session:
+        try:
+            repo = DocumentRepository(session)
+            store = PgVectorStore(session)
+            service = IngestionService(
+                pdf_parser=build_pdf_parser(settings),
+                chunker=build_chunker(settings),
+                embeddings=build_embeddings(settings),
+                vector_store=store,
+                documents=repo,
+            )
+            try:
+                await service.process(document_id=document_id, data=data)
+                await session.commit()
+            except Exception:
+                await session.commit()  # persist FAILED status before re-raising
+                raise
+        except Exception as exc:  # noqa: BLE001
+            log.error(
+                "background_ingestion_failed",
+                document_id=str(document_id),
+                error=str(exc),
+            )
 
 
 @router.post(
     "",
-    response_model=IngestionResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Upload and ingest a PDF (synchronous)",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Upload a PDF (async ingestion)",
 )
+@limiter.limit(_UPLOAD_RATE_LIMIT)
 async def create_document(
-    service: IngestionServiceDep,
+    request: Request,  # required by slowapi
+    background_tasks: BackgroundTasks,
     session: SessionDep,
+    settings: SettingsDep,
+    repo: DocumentRepositoryDep,
     file: UploadFile = File(...),
-) -> IngestionResponse:
+) -> DocumentResponse:
     if file.content_type not in {"application/pdf", "application/octet-stream"}:
         raise HTTPException(
             status_code=415,
@@ -69,16 +126,17 @@ async def create_document(
     if not data:
         raise HTTPException(status_code=422, detail="Empty file")
 
-    try:
-        result = await service.ingest(filename=file.filename or "unnamed.pdf", data=data)
-    except ValidationError:
-        await session.commit()  # persist FAILED status
-        raise
-    await session.commit()
-    return IngestionResponse(
-        document=DocumentResponse.from_domain(result.document),
-        chunks_created=result.chunks_created,
+    document = Document(
+        filename=file.filename or "unnamed.pdf",
+        status=DocumentStatus.PENDING,
     )
+    document = await repo.add(document)
+    await session.commit()
+
+    background_tasks.add_task(_process_in_background, document.id, data, settings)
+    log.info("document_accepted", document_id=str(document.id), filename=document.filename)
+
+    return DocumentResponse.from_domain(document)
 
 
 @router.get("", response_model=list[DocumentResponse])

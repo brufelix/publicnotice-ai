@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     # ─── Storage ──────────────────────────────────────────────
     storage_path: str = "./storage"
 
+    # ─── Rate limiting (slowapi) ──────────────────────────────
+    rate_limit_enabled: bool = True
+    rate_limit_upload: str = "10/minute"
+    rate_limit_chat: str = "30/minute"
+
     # ─── Helpers ──────────────────────────────────────────────
     @property
     def cors_origins_list(self) -> list[str]:

@@ -9,11 +9,6 @@ export interface DocumentResponse {
   created_at: string;
 }
 
-export interface IngestionResponse {
-  document: DocumentResponse;
-  chunks_created: number;
-}
-
 export interface Citation {
   index: number;
   chunk_id: string;

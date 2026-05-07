@@ -2,11 +2,19 @@
 
 Pure orchestration — depends on `Protocol`s from `adapters/`, never on
 concrete implementations. Wiring happens in `api/deps.py`.
+
+Two entry points:
+- ``ingest(filename, data)``: creates a new ``Document`` and runs the pipeline
+  synchronously. Used by tests and the seed script.
+- ``process(document_id, data)``: runs the pipeline against an existing,
+  already-persisted document. Used by the async (BackgroundTasks) flow so the
+  HTTP request can return ``202`` immediately.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from uuid import UUID
 
 from publicnotice.adapters.chunker.base import Chunker
 from publicnotice.adapters.embeddings.base import EmbeddingsProvider
@@ -14,7 +22,7 @@ from publicnotice.adapters.pdf.base import PdfParser
 from publicnotice.adapters.vectorstore.base import VectorStore
 from publicnotice.domain.chunk import Chunk
 from publicnotice.domain.document import Document, DocumentStatus
-from publicnotice.domain.exceptions import ExternalServiceError, ValidationError
+from publicnotice.domain.exceptions import ExternalServiceError, NotFoundError, ValidationError
 from publicnotice.infra.logging import get_logger
 from publicnotice.infra.repositories import DocumentRepository
 
@@ -48,19 +56,36 @@ class IngestionService:
         self._documents = documents
 
     async def ingest(self, *, filename: str, data: bytes) -> IngestionResult:
-        """Run the full pipeline. Persists the `Document` row even on failure."""
+        """Create a new document then run the pipeline (sync flow)."""
         document = Document(filename=filename, status=DocumentStatus.INDEXING)
         document = await self._documents.add(document)
-        log.info("ingestion_started", document_id=str(document.id), filename=filename)
+        return await self._run_pipeline(document, data)
+
+    async def process(self, *, document_id: UUID, data: bytes) -> IngestionResult:
+        """Run the pipeline against an already-persisted document (async flow)."""
+        document = await self._documents.get(document_id)
+        if document is None:
+            raise NotFoundError(f"Document {document_id} not found")
+        await self._documents.update_status(document.id, DocumentStatus.INDEXING)
+        document.status = DocumentStatus.INDEXING
+        return await self._run_pipeline(document, data)
+
+    async def _run_pipeline(self, document: Document, data: bytes) -> IngestionResult:
+        """Shared pipeline body. Persists FAILED status on errors then re-raises."""
+        log.info("ingestion_started", document_id=str(document.id), filename=document.filename)
 
         try:
             pages = self._parser.parse(data)
             if not pages:
+                await self._documents.update_status(
+                    document.id,
+                    DocumentStatus.FAILED,
+                    error_message="PDF has no extractable pages",
+                )
                 raise ValidationError("PDF has no extractable pages")
 
             pieces = self._chunker.split(pages)
             if not pieces:
-                # PDF parsed but had no extractable text (likely scanned)
                 await self._documents.update_status(
                     document.id,
                     DocumentStatus.FAILED,
@@ -69,7 +94,6 @@ class IngestionService:
                 )
                 raise ValidationError("PDF has no extractable text (likely scanned)")
 
-            # Batch embed
             embeddings: list[list[float]] = []
             for start in range(0, len(pieces), _EMBED_BATCH_SIZE):
                 batch = [p.content for p in pieces[start : start + _EMBED_BATCH_SIZE]]
