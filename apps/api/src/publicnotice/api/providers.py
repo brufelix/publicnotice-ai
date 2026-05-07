@@ -43,6 +43,11 @@ def build_embeddings(settings: Settings) -> EmbeddingsProvider:
         return OpenAIEmbeddings(
             api_key=settings.openai_api_key,
             model=settings.embedding_model,
+            dimensions=settings.embedding_dimensions,
+        )
+    if provider == "gemini":
+        raise NotImplementedError("Gemini embeddings adapter not implemented yet")
+    raise RuntimeError(f"Unknown embedding_provider: {provider}")
 
 
 def build_llm(settings: Settings) -> LLMPort:
@@ -71,8 +76,3 @@ def build_llm(settings: Settings) -> LLMPort:
 
         return GeminiLLM(api_key=settings.gemini_api_key, model=settings.gemini_model)
     raise RuntimeError(f"Unknown llm_provider: {provider}")
-            dimensions=settings.embedding_dimensions,
-        )
-    if provider == "gemini":
-        raise NotImplementedError("Gemini embeddings adapter not implemented yet")
-    raise RuntimeError(f"Unknown embedding_provider: {provider}")

@@ -13,6 +13,7 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.12",       # uploads
     "sse-starlette>=2.1.3",           # streaming SSE
+    "slowapi>=0.1.9",                 # rate limiting
     # Config / validação
     "pydantic>=2.9.0",
     "pydantic-settings>=2.6.0",

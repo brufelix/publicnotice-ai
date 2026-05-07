@@ -1,4 +1,4 @@
-import type { ChatHistoryMessage, DocumentResponse, IngestionResponse } from "./types";
+import type { ChatHistoryMessage, DocumentResponse } from "./types";
 
 export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -15,14 +15,14 @@ export async function listDocuments(): Promise<DocumentResponse[]> {
   return handle<DocumentResponse[]>(resp);
 }
 
-export async function uploadDocument(file: File): Promise<IngestionResponse> {
+export async function uploadDocument(file: File): Promise<DocumentResponse> {
   const form = new FormData();
   form.append("file", file);
   const resp = await fetch(`${API_URL}/api/v1/documents`, {
     method: "POST",
     body: form,
   });
-  return handle<IngestionResponse>(resp);
+  return handle<DocumentResponse>(resp);
 }
 
 export interface ChatRequestBody {

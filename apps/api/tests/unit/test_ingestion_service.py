@@ -143,3 +143,22 @@ async def test_ingest_propagates_validation_when_pdf_empty() -> None:
     with pytest.raises(ValidationError):
         await service.ingest(filename="x.pdf", data=b"")
     assert next(iter(repo.docs.values())).status == DocumentStatus.FAILED
+
+
+@pytest.mark.unit
+async def test_process_runs_pipeline_for_existing_pending_document() -> None:
+    pages = [PageText(page=1, text="hi")]
+    pieces = [ChunkPiece(content="hi", page=1, chunk_index=0)]
+    service, store, repo, _ = _make_service(pages, pieces)
+
+    # Pre-create a PENDING document (simulating the async accept step)
+    pending = Document(filename="edital.pdf", status=DocumentStatus.PENDING)
+    await repo.add(pending)
+
+    result = await service.process(document_id=pending.id, data=b"%PDF-...")
+
+    assert result.document.id == pending.id
+    assert result.document.status == DocumentStatus.INDEXED
+    assert result.chunks_created == 1
+    assert len(store.added) == 1
+    assert repo.docs[pending.id].status == DocumentStatus.INDEXED
