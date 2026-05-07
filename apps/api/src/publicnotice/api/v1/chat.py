@@ -13,12 +13,14 @@ import json
 from collections.abc import AsyncIterator
 from uuid import UUID
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
 
 from publicnotice.adapters.llm.base import ChatMessage
 from publicnotice.api.deps import ChatServiceDep
+from publicnotice.api.rate_limit import limiter
+from publicnotice.config import get_settings
 from publicnotice.domain.exceptions import ExternalServiceError
 from publicnotice.infra.logging import get_logger
 from publicnotice.services.chat import (
@@ -29,6 +31,7 @@ from publicnotice.services.chat import (
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 log = get_logger(__name__)
+_CHAT_RATE_LIMIT = get_settings().rate_limit_chat
 
 
 class HistoryMessage(BaseModel):
@@ -63,7 +66,9 @@ def _serialize_citations(event: CitationsEvent) -> str:
 
 
 @router.post("", summary="Stream a grounded answer over indexed editais (SSE)")
+@limiter.limit(_CHAT_RATE_LIMIT)
 async def chat(
+    request: Request,  # required by slowapi
     payload: ChatRequest,
     service: ChatServiceDep,
 ) -> EventSourceResponse:

@@ -8,6 +8,8 @@ os.environ.setdefault(
     "DATABASE_URL",
     "postgresql+asyncpg://postgres:postgres@localhost:5432/publicnotice_test",
 )
+# Disable rate limiting in tests so repeated calls do not get throttled
+os.environ.setdefault("RATE_LIMIT_ENABLED", "false")
 
 import pytest
 from fastapi.testclient import TestClient

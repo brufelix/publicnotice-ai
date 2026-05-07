@@ -70,6 +70,14 @@ def get_ingestion_service(
     documents: Annotated[DocumentRepository, Depends(get_document_repository)],
 ) -> IngestionService:
     return IngestionService(
+        pdf_parser=pdf_parser,
+        chunker=chunker,
+        embeddings=embeddings,
+        vector_store=vector_store,
+        documents=documents,
+    )
+
+
 def get_retrieval_service(
     embeddings: Annotated[EmbeddingsProvider, Depends(get_embeddings)],
     vector_store: Annotated[VectorStore, Depends(get_vector_store)],
@@ -92,12 +100,4 @@ VectorStoreDep = Annotated[VectorStore, Depends(get_vector_store)]
 DocumentRepositoryDep = Annotated[DocumentRepository, Depends(get_document_repository)]
 IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
 RetrievalServiceDep = Annotated[RetrievalService, Depends(get_retrieval_service)]
-ChatServiceDep = Annotated[ChatService, Depends(get_chat
-
-
-PdfParserDep = Annotated[PdfParser, Depends(get_pdf_parser)]
-ChunkerDep = Annotated[Chunker, Depends(get_chunker)]
-EmbeddingsDep = Annotated[EmbeddingsProvider, Depends(get_embeddings)]
-VectorStoreDep = Annotated[VectorStore, Depends(get_vector_store)]
-DocumentRepositoryDep = Annotated[DocumentRepository, Depends(get_document_repository)]
-IngestionServiceDep = Annotated[IngestionService, Depends(get_ingestion_service)]
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
