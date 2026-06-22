@@ -1,6 +1,6 @@
 "use client";
 
-import { type ChatTurn, useChatStream } from "@/hooks/use-chat-stream";
+import type { ChatTurn, useChatStream } from "@/hooks/use-chat-stream";
 import { useDocumentUpload } from "@/hooks/use-document-upload";
 import { useDocuments } from "@/hooks/use-documents";
 import type { Citation } from "@/lib/types";
