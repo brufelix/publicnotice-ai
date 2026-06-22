@@ -66,3 +66,11 @@ class DocumentRepository:
         if error_message is not None:
             row.error_message = error_message
         await self._session.flush()
+
+    async def delete(self, document_id: UUID) -> bool:
+        row = await self._session.get(DocumentORM, document_id)
+        if row is None:
+            return False
+        await self._session.delete(row)
+        await self._session.flush()
+        return True
