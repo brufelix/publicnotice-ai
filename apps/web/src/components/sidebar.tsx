@@ -1,109 +1,181 @@
 "use client";
 
-import { useDocuments } from "@/hooks/use-documents";
-import type { DocumentResponse, DocumentStatus } from "@/lib/types";
+import { useDocumentUpload } from "@/hooks/use-document-upload";
+import { useDeleteDocument, useDocuments } from "@/hooks/use-documents";
+import type { DocumentResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { CheckCircle2, FileText, Loader2, XCircle } from "lucide-react";
-import { UploadButton } from "./upload-button";
+import { FilePlus, FileText, Loader2, Trash2 } from "lucide-react";
 
 interface SidebarProps {
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-}
-
-const STATUS_LABEL: Record<DocumentStatus, string> = {
-  pending: "Aguardando",
-  indexing: "Indexando",
-  indexed: "Pronto",
-  failed: "Falhou",
-};
-
-function StatusIcon({ status }: { status: DocumentStatus }) {
-  if (status === "indexed")
-    return <CheckCircle2 size={14} className="text-[var(--color-success)]" />;
-  if (status === "failed") return <XCircle size={14} className="text-[var(--color-danger)]" />;
-  return <Loader2 size={14} className="animate-spin text-[var(--color-warning)]" />;
+  onDocumentDeleted?: (id: string) => void;
 }
 
 function DocItem({
   doc,
   selected,
   onClick,
+  onDelete,
+  isDeleting,
 }: {
   doc: DocumentResponse;
   selected: boolean;
   onClick: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
 }) {
   const disabled = doc.status !== "indexed";
+  const isProcessing = doc.status === "pending" || doc.status === "indexing";
+  const canDelete = doc.status !== "indexing";
+
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      title={doc.error_message ?? doc.filename}
+    <div
       className={cn(
-        "group flex w-full items-start gap-2 rounded-md border px-3 py-2 text-left text-sm transition",
-        selected
-          ? "border-[var(--color-primary)] bg-[var(--color-surface-2)]"
-          : "border-transparent bg-[var(--color-surface)] hover:border-[var(--color-border)]",
-        disabled && "cursor-not-allowed opacity-70",
+        "group/item relative flex items-center rounded-md transition-colors duration-150",
+        selected ? "bg-[var(--color-surface-2)]" : "hover:bg-[var(--color-surface-2)]/80",
       )}
     >
-      <FileText size={16} className="mt-0.5 shrink-0 text-[var(--color-text-muted)]" />
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{doc.filename}</div>
-        <div className="mt-0.5 flex items-center gap-1.5 text-xs text-[var(--color-text-muted)]">
-          <StatusIcon status={doc.status} />
-          <span>{STATUS_LABEL[doc.status]}</span>
-          {doc.status === "indexed" && <span>· {doc.pages} págs</span>}
-        </div>
-      </div>
-    </button>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={disabled}
+        title={doc.error_message ?? doc.filename}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2.5 py-1.5 pl-2 pr-8 text-left text-[13px] transition-colors",
+          selected ? "text-[var(--color-text)]" : "text-[var(--color-text-muted)]",
+          "group-hover/item:text-[var(--color-text)]",
+          disabled && !isProcessing && "cursor-not-allowed opacity-50",
+        )}
+      >
+        {isProcessing ? (
+          <Loader2 size={15} className="shrink-0 animate-spin" />
+        ) : (
+          <FileText size={15} className="shrink-0" />
+        )}
+        <span className="min-w-0 flex-1 truncate">{doc.filename}</span>
+      </button>
+      {canDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          disabled={isDeleting}
+          title="Remover análise"
+          className={cn(
+            "absolute right-1 top-1/2 -translate-y-1/2 rounded p-1",
+            "text-[var(--color-text-muted)] opacity-0 scale-90",
+            "transition-all duration-150 ease-out",
+            "group-hover/item:opacity-100 group-hover/item:scale-100",
+            "hover:bg-[var(--color-danger)]/15 hover:text-[var(--color-danger)]",
+            "focus-visible:opacity-100 focus-visible:scale-100",
+            "disabled:cursor-not-allowed disabled:opacity-40",
+          )}
+        >
+          <Trash2 size={14} />
+        </button>
+      )}
+    </div>
   );
 }
 
-export function Sidebar({ selectedId, onSelect }: SidebarProps) {
+export function Sidebar({ selectedId, onSelect, onDocumentDeleted }: SidebarProps) {
   const { data, isLoading, isError, error } = useDocuments();
+  const { inputRef, upload, openPicker, onInputChange } = useDocumentUpload();
+  const deleteDoc = useDeleteDocument();
+
+  const handleDelete = async (doc: DocumentResponse) => {
+    if (!window.confirm(`Remover "${doc.filename}"?`)) return;
+    try {
+      await deleteDoc.mutateAsync(doc.id);
+      onDocumentDeleted?.(doc.id);
+      if (selectedId === doc.id) {
+        onSelect(null);
+      }
+    } catch {
+      /* mutation error surfaced via deleteDoc.isError if needed */
+    }
+  };
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col gap-4 border-r border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-      <div>
-        <h1 className="text-base font-semibold">📜 publicnotice-ai</h1>
-        <p className="text-xs text-[var(--color-text-muted)]">Converse com seus editais</p>
-      </div>
-
-      <UploadButton />
-
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-[var(--color-text-muted)]">
-        <span>Documentos</span>
+    <aside className="flex h-full w-64 shrink-0 flex-col border-r border-[var(--color-border)] bg-black py-3">
+      <div className="px-2">
         <button
           type="button"
-          onClick={() => onSelect(null)}
+          onClick={openPicker}
+          disabled={upload.isPending}
           className={cn(
-            "rounded px-1.5 py-0.5 hover:bg-[var(--color-surface-2)]",
-            selectedId === null && "text-[var(--color-primary)]",
+            "flex w-full items-center gap-2.5 rounded-md px-2 py-1.5 text-left text-[13px] text-[var(--color-text-muted)]",
+            "transition-colors hover:bg-[var(--color-surface-2)]/60 hover:text-[var(--color-text)]",
+            "disabled:cursor-not-allowed disabled:opacity-50",
           )}
         >
-          Todos
+          <FilePlus size={15} className="shrink-0" />
+          <span>{upload.isPending ? "Indexando…" : "Novo Documento"}</span>
         </button>
+        <input
+          ref={inputRef}
+          type="file"
+          accept="application/pdf"
+          onChange={onInputChange}
+          className="hidden"
+        />
       </div>
 
-      <div className="flex-1 space-y-2 overflow-y-auto pr-1">
-        {isLoading && <p className="text-sm text-[var(--color-text-muted)]">Carregando…</p>}
-        {isError && (
-          <p className="text-sm text-[var(--color-danger)]">{(error as Error).message}</p>
-        )}
-        {data?.length === 0 && !isLoading && (
-          <p className="text-sm text-[var(--color-text-muted)]">Envie um PDF para começar.</p>
-        )}
-        {data?.map((doc) => (
-          <DocItem
-            key={doc.id}
-            doc={doc}
-            selected={selectedId === doc.id}
-            onClick={() => onSelect(doc.id)}
-          />
-        ))}
+      <div className="mt-5 flex min-h-0 flex-1 flex-col px-2">
+        <div className="mb-1.5 flex items-center justify-between px-2">
+          <span className="text-[11px] font-medium text-[var(--color-text-muted)]">
+            Lista de Análises
+          </span>
+          <button
+            type="button"
+            onClick={() => onSelect(null)}
+            className={cn(
+              "text-[11px] transition-colors",
+              selectedId === null
+                ? "text-[var(--color-text)]"
+                : "text-[var(--color-text-muted)] hover:text-[var(--color-text)]",
+            )}
+          >
+            Todos
+          </button>
+        </div>
+
+        <div className="flex-1 space-y-0.5 overflow-y-auto">
+          {isLoading && (
+            <div className="flex items-center gap-2 px-2 py-1.5 text-[13px] text-[var(--color-text-muted)]">
+              <Loader2 size={14} className="animate-spin" />
+              Carregando…
+            </div>
+          )}
+          {isError && (
+            <p className="px-2 py-1.5 text-[12px] text-[var(--color-danger)]">
+              {(error as Error).message}
+            </p>
+          )}
+          {deleteDoc.isError && (
+            <p className="px-2 py-1.5 text-[12px] text-[var(--color-danger)]">
+              {(deleteDoc.error as Error).message}
+            </p>
+          )}
+          {data?.length === 0 && !isLoading && (
+            <p className="px-2 py-1.5 text-[12px] text-[var(--color-text-muted)]">
+              Nenhuma análise ainda.
+            </p>
+          )}
+          {data?.map((doc) => (
+            <DocItem
+              key={doc.id}
+              doc={doc}
+              selected={selectedId === doc.id}
+              onClick={() => onSelect(doc.id)}
+              onDelete={() => void handleDelete(doc)}
+              isDeleting={deleteDoc.isPending}
+            />
+          ))}
+        </div>
       </div>
     </aside>
   );

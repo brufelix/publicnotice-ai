@@ -47,15 +47,15 @@ pull-models: ## Baixa modelos LLM e embeddings no Ollama
 # ─── Banco de dados ──────────────────────────────────────────
 .PHONY: migrate
 migrate: ## Roda migrations (Alembic)
-	$(COMPOSE) exec api uv run alembic upgrade head
+	$(COMPOSE) exec api alembic upgrade head
 
 .PHONY: migration
 migration: ## Cria nova migration (ex: make migration name=add_x)
-	$(COMPOSE) exec api uv run alembic revision --autogenerate -m "$(name)"
+	$(COMPOSE) exec api alembic revision --autogenerate -m "$(name)"
 
 .PHONY: seed
 seed: ## Ingere PDFs de data/sample/
-	$(COMPOSE) exec api uv run python scripts/seed.py
+	$(COMPOSE) exec api python scripts/seed.py
 
 .PHONY: psql
 psql: ## Abre shell no Postgres

@@ -2,8 +2,6 @@
 
 > Assistente de IA para **editais de concursos públicos brasileiros**. Faça perguntas em linguagem natural e receba respostas com **citações ao trecho exato do PDF**.
 
-[![CI API](https://github.com/brunodias/publicnotice-ai/actions/workflows/ci-api.yml/badge.svg)](https://github.com/brunodias/publicnotice-ai/actions/workflows/ci-api.yml)
-[![CI Web](https://github.com/brunodias/publicnotice-ai/actions/workflows/ci-web.yml/badge.svg)](https://github.com/brunodias/publicnotice-ai/actions/workflows/ci-web.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 ---
@@ -66,7 +64,6 @@ Ver [`docs/architecture.md`](docs/architecture.md) para diagrama detalhado e flu
 ### Infra
 - **Docker Compose** (dev local: Postgres+pgvector + Ollama + API + Web)
 - **Railway** (API + DB) + **Vercel** (Web) em produção
-- **GitHub Actions** (CI por path filter)
 
 ---
 
@@ -138,6 +135,23 @@ Detalhes em [`docs/architecture.md`](docs/architecture.md).
 | API | Railway | `apps/api` |
 | Postgres + pgvector | Railway (template) | — |
 | Web | Vercel | `apps/web` |
+
+### Vercel (frontend)
+
+1. [vercel.com/new](https://vercel.com/new) → importar o repositório `publicnotice-ai`
+2. **Root Directory:** `apps/web`
+3. **Framework Preset:** Next.js (detectado automaticamente)
+4. Variável de ambiente:
+   - `NEXT_PUBLIC_API_URL` = URL da API no Railway (ex.: `https://seu-projeto.up.railway.app`)
+5. Deploy
+
+Via CLI (a partir de `apps/web`):
+
+```bash
+cp .env.example .env.local   # ajustar NEXT_PUBLIC_API_URL
+npx vercel                   # preview
+npx vercel --prod            # produção
+```
 
 Ver [`docs/adr/0005-deployment-strategy.md`](docs/adr/0005-deployment-strategy.md) (em breve).
 

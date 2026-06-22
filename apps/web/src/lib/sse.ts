@@ -19,7 +19,7 @@ export async function* parseSSE(response: Response): AsyncGenerator<SSEMessage> 
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
-      buffer += decoder.decode(value, { stream: true });
+      buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
 
       // Frames are separated by a blank line (\n\n)
       while (true) {

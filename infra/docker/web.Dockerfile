@@ -19,7 +19,8 @@ RUN corepack enable
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY apps/web/ ./
-ENV NEXT_TELEMETRY_DISABLED=1
+ENV NEXT_TELEMETRY_DISABLED=1 \
+    DOCKER_BUILD=true
 RUN pnpm build
 
 # ─── Stage 3: runtime ───────────────────────────────────────
