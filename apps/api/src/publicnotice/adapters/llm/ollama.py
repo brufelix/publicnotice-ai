@@ -18,7 +18,7 @@ class OllamaLLM:
         self,
         base_url: str,
         model: str,
-        timeout: float = 120.0,
+        timeout: float = 300.0,
     ) -> None:
         self._base_url = base_url.rstrip("/")
         self._model = model
