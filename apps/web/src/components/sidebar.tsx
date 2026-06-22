@@ -1,6 +1,7 @@
 "use client";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { UserMenu } from "@/components/user-menu";
 import { useDocumentUpload } from "@/hooks/use-document-upload";
 import { useDeleteDocument, useDocuments } from "@/hooks/use-documents";
 import type { DocumentResponse } from "@/lib/types";
@@ -200,6 +201,8 @@ export function Sidebar({ selectedId, onSelect, onDocumentDeleted }: SidebarProp
             ))}
           </div>
         </div>
+
+        <UserMenu />
       </aside>
     </>
   );
