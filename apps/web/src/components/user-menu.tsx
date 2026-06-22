@@ -1,7 +1,7 @@
 "use client";
 
 import { LoginDialog } from "@/components/login-dialog";
-import { useUser } from "@/hooks/use-user";
+import { useUser } from "@/components/providers/user-provider";
 import { userInitial } from "@/lib/user-storage";
 import { cn } from "@/lib/utils";
 import { ChevronsUpDown, LogOut, Settings } from "lucide-react";

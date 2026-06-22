@@ -1,19 +1,15 @@
 "use client";
 
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useAppChat } from "@/components/providers/app-chat-provider";
 import { UserMenu } from "@/components/user-menu";
 import { useDocumentUpload } from "@/hooks/use-document-upload";
 import { useDeleteDocument, useDocuments } from "@/hooks/use-documents";
 import type { DocumentResponse } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { FilePlus, FileText, Loader2, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
-
-interface SidebarProps {
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
-  onDocumentDeleted?: (id: string) => void;
-}
 
 function DocItem({
   doc,
@@ -84,7 +80,9 @@ function DocItem({
   );
 }
 
-export function Sidebar({ selectedId, onSelect, onDocumentDeleted }: SidebarProps) {
+export function Sidebar() {
+  const router = useRouter();
+  const { selectedId, setSelectedId, removeSession } = useAppChat();
   const { data, isLoading, isError, error } = useDocuments();
   const { inputRef, upload, openPicker, onInputChange } = useDocumentUpload();
   const deleteDoc = useDeleteDocument();
@@ -95,14 +93,19 @@ export function Sidebar({ selectedId, onSelect, onDocumentDeleted }: SidebarProp
     const doc = docToDelete;
     try {
       await deleteDoc.mutateAsync(doc.id);
-      onDocumentDeleted?.(doc.id);
+      removeSession(doc.id);
       if (selectedId === doc.id) {
-        onSelect(null);
+        setSelectedId(null);
       }
       setDocToDelete(null);
     } catch {
       /* mutation error surfaced via deleteDoc.isError if needed */
     }
+  };
+
+  const selectDocument = (id: string | null) => {
+    setSelectedId(id);
+    router.push("/");
   };
 
   return (
@@ -155,7 +158,7 @@ export function Sidebar({ selectedId, onSelect, onDocumentDeleted }: SidebarProp
             </span>
             <button
               type="button"
-              onClick={() => onSelect(null)}
+              onClick={() => selectDocument(null)}
               className={cn(
                 "text-[11px] transition-colors",
                 selectedId === null
@@ -194,7 +197,7 @@ export function Sidebar({ selectedId, onSelect, onDocumentDeleted }: SidebarProp
                 key={doc.id}
                 doc={doc}
                 selected={selectedId === doc.id}
-                onClick={() => onSelect(doc.id)}
+                onClick={() => selectDocument(doc.id)}
                 onDelete={() => setDocToDelete(doc)}
                 isDeleting={deleteDoc.isPending && docToDelete?.id === doc.id}
               />
