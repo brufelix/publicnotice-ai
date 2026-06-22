@@ -25,6 +25,16 @@ export async function uploadDocument(file: File): Promise<DocumentResponse> {
   return handle<DocumentResponse>(resp);
 }
 
+export async function deleteDocument(documentId: string): Promise<void> {
+  const resp = await fetch(`${API_URL}/api/v1/documents/${documentId}`, {
+    method: "DELETE",
+  });
+  if (!resp.ok) {
+    const text = await resp.text().catch(() => resp.statusText);
+    throw new Error(`API ${resp.status}: ${text}`);
+  }
+}
+
 export interface ChatRequestBody {
   question: string;
   document_id?: string | null;
