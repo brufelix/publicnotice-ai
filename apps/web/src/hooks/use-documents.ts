@@ -1,6 +1,6 @@
 "use client";
 
-import { listDocuments, uploadDocument } from "@/lib/api";
+import { deleteDocument, listDocuments, uploadDocument } from "@/lib/api";
 import type { DocumentResponse } from "@/lib/types";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -23,6 +23,14 @@ export function useUploadDocument() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: uploadDocument,
+    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
+  });
+}
+
+export function useDeleteDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteDocument,
     onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
   });
 }

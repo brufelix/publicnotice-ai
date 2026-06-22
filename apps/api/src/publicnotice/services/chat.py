@@ -16,14 +16,17 @@ from publicnotice.adapters.llm.base import ChatMessage, LLMProvider
 from publicnotice.adapters.vectorstore.base import RetrievedChunk
 from publicnotice.services.retrieval import RetrievalService
 
-_SYSTEM_PROMPT = """Você é um assistente especializado em editais de concursos públicos brasileiros.
+_SYSTEM_PROMPT = """Você é um assistente que responde perguntas sobre documentos em PDF.
+
+Os documentos podem ser editais de concursos públicos, relatórios internos, especificações técnicas ou outros textos. Use somente os trechos fornecidos no contexto — não invente informação.
 
 REGRAS:
-1. Responda APENAS com base nos trechos do edital fornecidos abaixo.
-2. Cite a fonte usando colchetes numerados, ex: [1], [2]. Use os mesmos números do contexto.
-3. Se a resposta não estiver no contexto, diga claramente: "Não encontrei essa informação no edital."
-4. Seja objetivo, preciso e use linguagem clara em português.
-5. Quando relevante, mencione a página do edital onde a informação aparece.
+1. Responda APENAS com base nos trechos numerados do contexto ([1], [2], …).
+2. Cite a fonte com os mesmos colchetes do contexto, ex.: [1], [2].
+3. Se o contexto contiver um campo ou rótulo explícito (ex.: "Origem:", "Data:", "Escopo:", "Status:"), use esse valor quando a pergunta for sobre o mesmo assunto — mesmo que a pergunta use palavras diferentes (ex.: "origem do arquivo" ↔ "Origem:").
+4. Só diga "Não encontrei essa informação no documento." quando o contexto realmente não contiver dados suficientes para responder.
+5. Seja objetivo, preciso e responda em português.
+6. Quando relevante, indique a página de onde veio a informação.
 """
 
 
@@ -55,12 +58,14 @@ class DoneEvent:
 ChatEvent = CitationsEvent | TokenEvent | DoneEvent
 
 _SNIPPET_CHARS = 240
+_MAX_CHUNK_CHARS_IN_PROMPT = 1200
 
 
 def _build_context_block(chunks: Sequence[RetrievedChunk]) -> str:
     lines = []
     for i, rc in enumerate(chunks, start=1):
-        lines.append(f"[{i}] (página {rc.chunk.page})\n{rc.chunk.content}")
+        content = rc.chunk.content[:_MAX_CHUNK_CHARS_IN_PROMPT]
+        lines.append(f"[{i}] (página {rc.chunk.page})\n{content}")
     return "\n\n---\n\n".join(lines)
 
 
@@ -79,14 +84,14 @@ def _to_citations(chunks: Sequence[RetrievedChunk]) -> list[Citation]:
 
 
 class ChatService:
-    """Grounded chat over the indexed editais."""
+    """Grounded chat over indexed documents."""
 
     def __init__(
         self,
         retrieval: RetrievalService,
         llm: LLMProvider,
         *,
-        top_k: int = 5,
+        top_k: int = 3,
         temperature: float = 0.2,
     ) -> None:
         self._retrieval = retrieval
@@ -109,7 +114,7 @@ class ChatService:
 
         if not retrieved:
             for token in (
-                "Não encontrei nenhum trecho relevante no edital para responder a essa pergunta."
+                "Não encontrei nenhum trecho relevante no documento para responder a essa pergunta."
             ).split(" "):
                 yield TokenEvent(delta=token + " ")
             yield DoneEvent()
@@ -122,9 +127,9 @@ class ChatService:
             ChatMessage(
                 role="user",
                 content=(
-                    f"CONTEXTO DO EDITAL:\n\n{context_block}\n\n"
+                    f"CONTEXTO DO DOCUMENTO:\n\n{context_block}\n\n"
                     f"PERGUNTA: {question}\n\n"
-                    "Responda em português, citando as fontes como [N]."
+                    "Responda em português com base exclusiva no contexto acima, citando as fontes como [N]."
                 ),
             ),
         ]

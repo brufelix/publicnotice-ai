@@ -15,13 +15,14 @@ export function CitationChip({ citation, onClick }: CitationChipProps) {
       onClick={() => onClick?.(citation)}
       title={citation.snippet}
       className={cn(
-        "inline-flex items-center gap-1 rounded-full border border-[var(--color-border)]",
-        "bg-[var(--color-surface-2)] px-2 py-0.5 text-xs font-medium",
-        "text-[var(--color-text)] transition hover:border-[var(--color-primary)]",
+        "inline-flex items-center gap-1.5 rounded-full border border-[var(--color-border-strong)]",
+        "bg-[var(--color-bg-elevated)] px-2.5 py-1 text-xs font-medium",
+        "text-[var(--color-text)] transition-all duration-200",
+        "hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-primary-muted)]",
       )}
     >
-      <span className="text-[var(--color-primary)]">[{citation.index}]</span>
-      <span className="text-[var(--color-text-muted)]">pág {citation.page}</span>
+      <span className="font-semibold text-[var(--color-primary)]">[{citation.index}]</span>
+      <span className="text-[var(--color-text-muted)]">pág. {citation.page}</span>
     </button>
   );
 }

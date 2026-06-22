@@ -3,7 +3,7 @@
 import { type ChatRequestBody, postChatStream } from "@/lib/api";
 import { parseSSE } from "@/lib/sse";
 import type { Citation } from "@/lib/types";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export interface ChatTurn {
   id: string;
@@ -12,6 +12,13 @@ export interface ChatTurn {
   citations?: Citation[];
   status: "streaming" | "done" | "error";
   error?: string;
+  awaitingTokens?: boolean;
+}
+
+export const ALL_DOCUMENTS_KEY = "__all__";
+
+export function chatSessionKey(documentId: string | null): string {
+  return documentId ?? ALL_DOCUMENTS_KEY;
 }
 
 interface SendOptions {
@@ -24,15 +31,36 @@ function newId(): string {
   return crypto.randomUUID();
 }
 
-export function useChatStream() {
-  const [turns, setTurns] = useState<ChatTurn[]>([]);
+export function useChatStream(documentId: string | null) {
+  const sessionKey = chatSessionKey(documentId);
+  const [sessions, setSessions] = useState<Record<string, ChatTurn[]>>({});
   const [isStreaming, setIsStreaming] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const streamingSessionKeyRef = useRef<string | null>(null);
+
+  const turns = sessions[sessionKey] ?? [];
+
+  useEffect(() => {
+    return () => abortRef.current?.abort();
+  }, []);
+
+  const updateSessionTurns = useCallback(
+    (key: string, updater: (turns: ChatTurn[]) => ChatTurn[]) => {
+      setSessions((prev) => ({
+        ...prev,
+        [key]: updater(prev[key] ?? []),
+      }));
+    },
+    [],
+  );
 
   const send = useCallback(
-    async ({ question, documentId, topK }: SendOptions) => {
+    async ({ question, documentId: docId, topK }: SendOptions) => {
       const trimmed = question.trim();
       if (!trimmed || isStreaming) return;
+
+      const key = chatSessionKey(docId ?? null);
+      streamingSessionKeyRef.current = key;
 
       const userTurn: ChatTurn = {
         id: newId(),
@@ -46,24 +74,38 @@ export function useChatStream() {
         role: "assistant",
         content: "",
         status: "streaming",
+        awaitingTokens: true,
       };
 
-      // Snapshot history (excluding the new turns) to send to the API
-      const history = turns
-        .filter((t) => t.status === "done")
-        .map((t) => ({ role: t.role, content: t.content }));
+      let history: { role: "user" | "assistant"; content: string }[] = [];
+      setSessions((prev) => {
+        const currentTurns = prev[key] ?? [];
+        history = currentTurns
+          .filter((t) => t.status === "done")
+          .map((t) => ({ role: t.role, content: t.content }));
+        return {
+          ...prev,
+          [key]: [...currentTurns, userTurn, assistantTurn],
+        };
+      });
 
-      setTurns((prev) => [...prev, userTurn, assistantTurn]);
       setIsStreaming(true);
-
       const ctrl = new AbortController();
       abortRef.current = ctrl;
 
       const body: ChatRequestBody = {
         question: trimmed,
-        document_id: documentId ?? null,
+        document_id: docId ?? null,
         history,
         top_k: topK,
+      };
+
+      let gotDone = false;
+
+      const patchAssistant = (patch: Partial<ChatTurn>) => {
+        updateSessionTurns(key, (sessionTurns) =>
+          sessionTurns.map((t) => (t.id === assistantId ? { ...t, ...patch } : t)),
+        );
       };
 
       try {
@@ -72,50 +114,64 @@ export function useChatStream() {
           if (msg.event === "citations") {
             try {
               const parsed = JSON.parse(msg.data) as { citations: Citation[] };
-              setTurns((prev) =>
-                prev.map((t) => (t.id === assistantId ? { ...t, citations: parsed.citations } : t)),
-              );
+              patchAssistant({ citations: parsed.citations });
             } catch {
               /* ignore malformed frames */
             }
           } else if (msg.event === "token") {
-            setTurns((prev) =>
-              prev.map((t) => (t.id === assistantId ? { ...t, content: t.content + msg.data } : t)),
-            );
-          } else if (msg.event === "done") {
-            setTurns((prev) =>
-              prev.map((t) => (t.id === assistantId ? { ...t, status: "done" } : t)),
-            );
-            break;
-          } else if (msg.event === "error") {
-            setTurns((prev) =>
-              prev.map((t) =>
+            updateSessionTurns(key, (sessionTurns) =>
+              sessionTurns.map((t) =>
                 t.id === assistantId
-                  ? { ...t, status: "error", error: msg.data || "stream_error" }
+                  ? { ...t, content: t.content + msg.data, awaitingTokens: false }
                   : t,
               ),
             );
+          } else if (msg.event === "done") {
+            gotDone = true;
+            patchAssistant({ status: "done", awaitingTokens: false });
+            break;
+          } else if (msg.event === "error") {
+            gotDone = true;
+            patchAssistant({
+              status: "error",
+              awaitingTokens: false,
+              error: msg.data || "stream_error",
+            });
             break;
           }
         }
+
+        if (!gotDone) {
+          updateSessionTurns(key, (sessionTurns) =>
+            sessionTurns.map((t) => {
+              if (t.id !== assistantId || t.status !== "streaming") return t;
+              if (t.content) return { ...t, status: "done", awaitingTokens: false };
+              return {
+                ...t,
+                status: "error",
+                awaitingTokens: false,
+                error: "A resposta foi interrompida antes de concluir.",
+              };
+            }),
+          );
+        }
       } catch (err) {
         if ((err as Error).name === "AbortError") {
-          setTurns((prev) =>
-            prev.map((t) => (t.id === assistantId ? { ...t, status: "done" } : t)),
-          );
+          patchAssistant({ status: "done", awaitingTokens: false });
         } else {
-          setTurns((prev) =>
-            prev.map((t) =>
-              t.id === assistantId ? { ...t, status: "error", error: (err as Error).message } : t,
-            ),
-          );
+          patchAssistant({
+            status: "error",
+            awaitingTokens: false,
+            error: (err as Error).message,
+          });
         }
       } finally {
         setIsStreaming(false);
         abortRef.current = null;
+        streamingSessionKeyRef.current = null;
       }
     },
-    [isStreaming, turns],
+    [isStreaming, updateSessionTurns],
   );
 
   const stop = useCallback(() => {
@@ -124,8 +180,18 @@ export function useChatStream() {
 
   const reset = useCallback(() => {
     abortRef.current?.abort();
-    setTurns([]);
+    setSessions((prev) => ({ ...prev, [sessionKey]: [] }));
+  }, [sessionKey]);
+
+  const removeSession = useCallback((documentIdToRemove: string) => {
+    const key = chatSessionKey(documentIdToRemove);
+    setSessions((prev) => {
+      if (!(key in prev)) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
   }, []);
 
-  return { turns, isStreaming, send, stop, reset };
+  return { turns, isStreaming, send, stop, reset, removeSession };
 }

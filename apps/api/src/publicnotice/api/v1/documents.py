@@ -21,6 +21,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
+from starlette.responses import Response
 
 from publicnotice.api.deps import (
     DocumentRepositoryDep,
@@ -107,7 +108,8 @@ async def _process_in_background(document_id: UUID, data: bytes, settings: Setti
 )
 @limiter.limit(_UPLOAD_RATE_LIMIT)
 async def create_document(
-    request: Request,  # required by slowapi
+    request: Request,
+    response: Response,
     background_tasks: BackgroundTasks,
     session: SessionDep,
     settings: SettingsDep,
@@ -143,6 +145,19 @@ async def create_document(
 async def list_documents(repo: DocumentRepositoryDep) -> list[DocumentResponse]:
     docs = await repo.list_all()
     return [DocumentResponse.from_domain(d) for d in docs]
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: UUID,
+    session: SessionDep,
+    repo: DocumentRepositoryDep,
+) -> None:
+    deleted = await repo.delete(document_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Document not found")
+    await session.commit()
+    log.info("document_deleted", document_id=str(document_id))
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)

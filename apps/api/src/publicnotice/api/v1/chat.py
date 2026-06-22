@@ -16,6 +16,7 @@ from uuid import UUID
 from fastapi import APIRouter, Request
 from pydantic import BaseModel, Field
 from sse_starlette.sse import EventSourceResponse
+from starlette.responses import Response
 
 from publicnotice.adapters.llm.base import ChatMessage
 from publicnotice.api.deps import ChatServiceDep
@@ -68,7 +69,8 @@ def _serialize_citations(event: CitationsEvent) -> str:
 @router.post("", summary="Stream a grounded answer over indexed editais (SSE)")
 @limiter.limit(_CHAT_RATE_LIMIT)
 async def chat(
-    request: Request,  # required by slowapi
+    request: Request,
+    response: Response,
     payload: ChatRequest,
     service: ChatServiceDep,
 ) -> EventSourceResponse:
