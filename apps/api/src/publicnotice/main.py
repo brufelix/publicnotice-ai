@@ -1,13 +1,16 @@
 """FastAPI application entrypoint."""
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from typing import cast
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 from publicnotice import __version__
 from publicnotice.api.errors import register_exception_handlers
@@ -53,7 +56,14 @@ def create_app() -> FastAPI:
 
     # Rate limiting (slowapi)
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # slowapi tipa o handler com RateLimitExceeded; Starlette exige Exception.
+    app.add_exception_handler(
+        RateLimitExceeded,
+        cast(
+            Callable[[Request, Exception], Response],
+            _rate_limit_exceeded_handler,
+        ),
+    )
     app.add_middleware(SlowAPIMiddleware)
 
     register_exception_handlers(app)

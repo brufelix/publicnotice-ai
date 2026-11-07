@@ -71,6 +71,10 @@ strict = true
 plugins = ["pydantic.mypy"]
 exclude = ["migrations/"]
 
+[[tool.mypy.overrides]]
+module = ["pgvector.*", "pymupdf", "pymupdf.*"]
+ignore_missing_imports = true
+
 # ─── Pytest ──────────────────────────────────────────────────
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
+from typing import cast
 
 from openai import AsyncOpenAI, OpenAIError
+from openai.types.chat import ChatCompletionMessageParam
 
 from publicnotice.adapters.llm.base import ChatMessage
 from publicnotice.domain.exceptions import ExternalServiceError
@@ -34,9 +36,16 @@ class OpenAICompatibleLLM:
         max_tokens: int | None = None,
     ) -> AsyncIterator[str]:
         try:
+            payload: list[ChatCompletionMessageParam] = [
+                cast(
+                    ChatCompletionMessageParam,
+                    {"role": m.role, "content": m.content},
+                )
+                for m in messages
+            ]
             stream = await self._client.chat.completions.create(
                 model=self._model,
-                messages=[{"role": m.role, "content": m.content} for m in messages],
+                messages=payload,
                 temperature=temperature,
                 max_tokens=max_tokens,
                 stream=True,

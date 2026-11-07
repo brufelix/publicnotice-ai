@@ -14,9 +14,13 @@ class ChatMessage:
 
 
 class LLMProvider(Protocol):
-    """Port: stream a chat completion."""
+    """Port: stream a chat completion.
 
-    async def stream(
+    Declared as a plain ``def`` returning ``AsyncIterator`` (not ``async def``)
+    so implementations that are async generators match under mypy.
+    """
+
+    def stream(
         self,
         messages: Sequence[ChatMessage],
         *,

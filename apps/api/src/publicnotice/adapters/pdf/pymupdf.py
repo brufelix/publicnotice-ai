@@ -15,15 +15,15 @@ class PyMuPDFParser:
         if not data:
             raise ValidationError("Empty PDF payload")
         try:
-            doc = pymupdf.open(stream=data, filetype="pdf")
+            doc = pymupdf.open(stream=data, filetype="pdf")  # type: ignore[no-untyped-call]
         except Exception as exc:  # pragma: no cover - upstream library error
             raise ValidationError(f"Invalid PDF file: {exc}") from exc
 
         try:
             pages: list[PageText] = []
-            for index, page in enumerate(doc, start=1):
+            for index, page in enumerate(doc, start=1):  # type: ignore[arg-type, var-annotated]
                 text = page.get_text("text") or ""
                 pages.append(PageText(page=index, text=text.strip()))
             return pages
         finally:
-            doc.close()
+            doc.close()  # type: ignore[no-untyped-call]
