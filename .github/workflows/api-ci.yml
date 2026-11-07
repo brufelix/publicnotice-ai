@@ -1,0 +1,82 @@
+# CI da API (apps/api) — unit + integration (testcontainers)
+name: API CI
+
+on:
+  push:
+    branches: [main, develop, staging]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/api-ci.yml"
+  pull_request:
+    branches: [main, develop, staging]
+    paths:
+      - "apps/api/**"
+      - ".github/workflows/api-ci.yml"
+
+concurrency:
+  group: api-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Pytest (unit + integration)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    env:
+      APP_ENV: test
+      RATE_LIMIT_ENABLED: "false"
+      # Docker no runner para testcontainers (Postgres/pgvector do PR1)
+      TESTCONTAINERS_RYUK_DISABLED: "true"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version-file: apps/api/.python-version
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Sync dependencies
+        # --frozen: usa uv.lock sem re-resolver (dev group incluso por padrão)
+        run: uv sync --frozen
+
+      - name: Run tests
+        # unit + integration; exclui evals (RAGAS fora de escopo)
+        run: uv run pytest -m "unit or integration" -ra --tb=short
+
+  lint:
+    name: Lint + type check (ruff + mypy)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/api
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          python-version-file: apps/api/.python-version
+          cache-dependency-glob: apps/api/uv.lock
+
+      - name: Sync dependencies
+        run: uv sync --frozen
+
+      - name: Ruff check
+        run: uv run ruff check .
+
+      - name: Mypy
+        # mesmo escopo do Makefile (`make lint`)
+        run: uv run mypy src
