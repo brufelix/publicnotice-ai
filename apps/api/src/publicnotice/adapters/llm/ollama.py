@@ -42,23 +42,25 @@ class OllamaLLM:
             payload["options"] = {**payload["options"], "num_predict": max_tokens}  # type: ignore[dict-item]
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                async with client.stream(
+            async with (
+                httpx.AsyncClient(timeout=self._timeout) as client,
+                client.stream(
                     "POST", f"{self._base_url}/api/chat", json=payload
-                ) as resp:
-                    resp.raise_for_status()
-                    async for line in resp.aiter_lines():
-                        if not line:
-                            continue
-                        try:
-                            event = json.loads(line)
-                        except json.JSONDecodeError:
-                            continue
-                        if event.get("done"):
-                            return
-                        message = event.get("message") or {}
-                        token = message.get("content") or ""
-                        if token:
-                            yield token
+                ) as resp,
+            ):
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line:
+                        continue
+                    try:
+                        event = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if event.get("done"):
+                        return
+                    message = event.get("message") or {}
+                    token = message.get("content") or ""
+                    if token:
+                        yield token
         except httpx.HTTPError as exc:
             raise ExternalServiceError(f"Ollama chat failed: {exc}") from exc

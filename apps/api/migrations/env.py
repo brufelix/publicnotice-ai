@@ -13,8 +13,8 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from publicnotice.config import get_settings
-from publicnotice.infra.db import Base
 from publicnotice.infra import models  # noqa: F401 — register ORM models
+from publicnotice.infra.db import Base
 
 config = context.config
 

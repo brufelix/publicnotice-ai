@@ -17,12 +17,14 @@ afterwards must own its session lifecycle.
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Request, UploadFile, status
 from pydantic import BaseModel
 from starlette.responses import Response
 
+from publicnotice.adapters.vectorstore.pgvector import PgVectorStore
 from publicnotice.api.deps import (
     DocumentRepositoryDep,
     SessionDep,
@@ -34,7 +36,6 @@ from publicnotice.api.providers import (
     build_pdf_parser,
 )
 from publicnotice.api.rate_limit import limiter
-from publicnotice.adapters.vectorstore.pgvector import PgVectorStore
 from publicnotice.config import Settings, get_settings
 from publicnotice.domain.document import Document, DocumentStatus
 from publicnotice.infra.db import SessionLocal
@@ -58,7 +59,7 @@ class DocumentResponse(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, doc: Document) -> "DocumentResponse":
+    def from_domain(cls, doc: Document) -> DocumentResponse:
         return cls(
             id=doc.id,
             filename=doc.filename,
@@ -92,7 +93,7 @@ async def _process_in_background(document_id: UUID, data: bytes, settings: Setti
             except Exception:
                 await session.commit()  # persist FAILED status before re-raising
                 raise
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.error(
                 "background_ingestion_failed",
                 document_id=str(document_id),
@@ -114,7 +115,7 @@ async def create_document(
     session: SessionDep,
     settings: SettingsDep,
     repo: DocumentRepositoryDep,
-    file: UploadFile = File(...),
+    file: Annotated[UploadFile, File()],
 ) -> DocumentResponse:
     if file.content_type not in {"application/pdf", "application/octet-stream"}:
         raise HTTPException(

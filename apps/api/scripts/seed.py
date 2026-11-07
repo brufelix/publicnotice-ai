@@ -10,12 +10,12 @@ import asyncio
 import sys
 from pathlib import Path
 
+from publicnotice.adapters.vectorstore.pgvector import PgVectorStore
 from publicnotice.api.providers import (
     build_chunker,
     build_embeddings,
     build_pdf_parser,
 )
-from publicnotice.adapters.vectorstore.pgvector import PgVectorStore
 from publicnotice.config import get_settings
 from publicnotice.infra.db import SessionLocal
 from publicnotice.infra.logging import configure_logging, get_logger
@@ -63,7 +63,7 @@ async def _main() -> int:
                     pages=result.document.pages,
                     chunks=result.chunks_created,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 await session.commit()  # persist FAILED status
                 failures += 1
                 log.error("seed_failed", file=path.name, error=str(exc))

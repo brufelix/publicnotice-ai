@@ -113,9 +113,7 @@ class ChatService:
         yield CitationsEvent(citations=citations)
 
         if not retrieved:
-            for token in (
-                "Não encontrei nenhum trecho relevante no documento para responder a essa pergunta."
-            ).split(" "):
+            for token in ["Não", "encontrei", "nenhum", "trecho", "relevante", "no", "documento", "para", "responder", "a", "essa", "pergunta."]:
                 yield TokenEvent(delta=token + " ")
             yield DoneEvent()
             return

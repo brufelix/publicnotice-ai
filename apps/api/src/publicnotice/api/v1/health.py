@@ -45,7 +45,7 @@ async def ready() -> ReadyResponse:
     """Readiness probe — verifies the DB is reachable."""
     try:
         await db.ping()
-    except Exception:  # noqa: BLE001 — readiness fails on any DB error
+    except Exception:
         from fastapi import HTTPException
 
         raise HTTPException(

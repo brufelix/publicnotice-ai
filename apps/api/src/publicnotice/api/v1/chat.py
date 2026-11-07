@@ -76,12 +76,12 @@ async def chat(
 ) -> EventSourceResponse:
     history = [ChatMessage(role=m.role, content=m.content) for m in payload.history]  # type: ignore[arg-type]
     # `top_k` is per-request: rebuild a service variant only if it differs from default.
-    if payload.top_k != service._top_k:  # noqa: SLF001 — internal knob
+    if payload.top_k != service._top_k:
         service = service.__class__(
-            retrieval=service._retrieval,  # noqa: SLF001
-            llm=service._llm,  # noqa: SLF001
+            retrieval=service._retrieval,
+            llm=service._llm,
             top_k=payload.top_k,
-            temperature=service._temperature,  # noqa: SLF001
+            temperature=service._temperature,
         )
 
     async def event_stream() -> AsyncIterator[dict[str, str]]:
@@ -100,7 +100,7 @@ async def chat(
         except ExternalServiceError as exc:
             log.error("chat_external_error", error=str(exc))
             yield {"event": "error", "data": "upstream_provider_error"}
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             log.error("chat_failed", error=str(exc))
             yield {"event": "error", "data": "internal_error"}
 
